@@ -862,14 +862,17 @@ static int loose_backend__stream(git_odb_stream **stream_out, git_odb_backend *_
 	loose_writestream *stream = NULL;
 	char hdr[64];
 	git_buf tmp_path = GIT_BUF_INIT;
-	int hdrlen;
+	size_t hdrlen;
+	int error;
 
 	assert(_backend && length >= 0);
 
 	backend = (loose_backend *)_backend;
 	*stream_out = NULL;
 
-	hdrlen = git_odb__format_object_header(hdr, sizeof(hdr), length, type);
+	if ((error = git_odb__format_object_header(&hdrlen,
+		hdr, sizeof(hdr), length, type)) < 0)
+		return error;
 
 	stream = git__calloc(1, sizeof(loose_writestream));
 	GITERR_CHECK_ALLOC(stream);
@@ -898,16 +901,19 @@ static int loose_backend__stream(git_odb_stream **stream_out, git_odb_backend *_
 
 static int loose_backend__write(git_odb_backend *_backend, const git_oid *oid, const void *data, size_t len, git_otype type)
 {
-	int error = 0, header_len;
+	int error = 0;
 	git_buf final_path = GIT_BUF_INIT;
 	char header[64];
+	size_t header_len;
 	git_filebuf fbuf = GIT_FILEBUF_INIT;
 	loose_backend *backend;
 
 	backend = (loose_backend *)_backend;
 
 	/* prepare the header for the file */
-	header_len = git_odb__format_object_header(header, sizeof(header), len, type);
+	if ((error = git_odb__format_object_header(&header_len,
+		header, sizeof(header), len, type)) < 0)
+		goto cleanup;
 
 	if (git_buf_joinpath(&final_path, backend->objects_dir, "tmp_object") < 0 ||
 		git_filebuf_open(&fbuf, final_path.ptr, filebuf_flags(backend),
